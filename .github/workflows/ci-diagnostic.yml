@@ -1,0 +1,62 @@
+# Added by Cedarwood Studio on its own fork for a CI Diagnostic sample report.
+# It measures how often one test fails when it is run many times on one commit.
+# It changes no code and no existing workflow. The setup steps are copied from
+# the build-lint-test job in ci.yml.
+name: CI Diagnostic flake probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ci-diagnostic/flake-probe
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: probe (${{ matrix.os }})
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      TEST_ID: tests/worker/test_worker.py::test_warns_when_workers_too_low
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: temporalio/bridge -> target
+          key: ${{ env.pythonLocation }}
+      - uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3
+        with:
+          version: "23.x"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8
+      - run: uv tool install poethepoet
+      - run: uv sync --all-extras
+      - run: poe build-develop
+      - name: The test alone, 200 times, one process
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: uv run pytest "$TEST_ID" --flake-finder --flake-runs=200 -p no:randomly
+        timeout-minutes: 20
+      - name: The test alone, 200 times, spread over all cores
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: uv run pytest "$TEST_ID" --flake-finder --flake-runs=200 -n auto --dist=worksteal
+        timeout-minutes: 20
+      - name: The whole test file, as CI runs it
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: uv run pytest tests/worker/test_worker.py -n auto --dist=worksteal
+        timeout-minutes: 20
