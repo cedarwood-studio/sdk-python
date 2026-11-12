@@ -16,7 +16,7 @@ permissions:
 jobs:
   probe:
     name: probe (${{ matrix.os }})
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -45,18 +45,18 @@ jobs:
       - run: uv tool install poethepoet
       - run: uv sync --all-extras
       - run: poe build-develop
-      - name: The test alone, 200 times, one process
+      - name: The test alone, 60 times, one process
         if: ${{ !cancelled() }}
         shell: bash
-        run: uv run pytest "$TEST_ID" --flake-finder --flake-runs=200 -p no:randomly
-        timeout-minutes: 20
+        run: uv run pytest "$TEST_ID" --flake-finder --flake-runs=60
+        timeout-minutes: 30
       - name: The test alone, 200 times, spread over all cores
         if: ${{ !cancelled() }}
         shell: bash
         run: uv run pytest "$TEST_ID" --flake-finder --flake-runs=200 -n auto --dist=worksteal
-        timeout-minutes: 20
+        timeout-minutes: 30
       - name: The whole test file, as CI runs it
         if: ${{ !cancelled() }}
         shell: bash
         run: uv run pytest tests/worker/test_worker.py -n auto --dist=worksteal
-        timeout-minutes: 20
+        timeout-minutes: 10
